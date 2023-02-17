@@ -145,8 +145,11 @@ const generateFieldTypeZodSchema = (
     }
     return `z.array(${maybeLazy(type.type, gen)})`;
   }
+  if (isNonNullType(type)) {
+    const gen = generateFieldTypeZodSchema(config, tsVisitor, schema, field, type.type, type);
+    return maybeLazy(type.type, gen);
+  }
   if (isNamedType(type)) {
-    console.log(type)
     const gen = generateNameNodeZodSchema(config, tsVisitor, schema, type.name);
     if (isListType(parentType)) {
       return `${gen}.nullable()`;
@@ -163,10 +166,6 @@ const generateFieldTypeZodSchema = (
       return `${appliedDirectivesGen}.nullable()`;
     }
     return `${appliedDirectivesGen}.nullish()`;
-  }
-  if (isNonNullType(type)) {
-    const gen = generateFieldTypeZodSchema(config, tsVisitor, schema, field, type.type, type);
-    return maybeLazy(type.type, gen);
   }
   console.warn('unhandled type:', type);
   return '';
