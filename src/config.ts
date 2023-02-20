@@ -212,4 +212,17 @@ export interface ValidationSchemaPluginConfig extends TypeScriptPluginConfig {
    * ```
    */
   directives?: DirectiveConfig;
+  /**
+   * @description Only generate for the listed types (and their dependants)
+   * @exampleMarkdown
+   * ```yml
+   * generates:
+   *   path/to/file.ts:
+   *     plugins:
+   *       - graphql-codegen-validation-schema
+   *     config:
+   *       schema: zod
+   *       typeWhitelist: ["Account", "AccountSettings"]
+   */
+  typeWhitelist?: string[];
 }

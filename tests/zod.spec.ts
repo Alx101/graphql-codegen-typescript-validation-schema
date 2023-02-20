@@ -767,4 +767,106 @@ describe('zod', () => {
       expect(result.content).toContain(wantContain);
     }
   });
+
+  it('generates from whitelist', async () => {
+    const schema = buildSchema(/* GraphQL */ `
+      type AccountSettings {
+        notificationGroups: [EmailFrequencyUnit]!
+        UI: AccountSettingsUI!
+        currencySetting: Currency!
+        activationOrder: [Boolean]!
+      }
+      scalar Currency @specifiedBy(url: "https://en.wikipedia.org/wiki/ISO_4217")
+      enum EmailFrequencyUnit {
+        DAY
+        WEEK
+        MONTH
+      }
+
+      type DarkModeSettings {
+        active: Boolean!
+        contrast: Int!
+      }
+
+      type AccountSettingsUI {
+        darkMode: DarkModeSettings!
+        theme: String!
+        savedPages: [Int]!
+      }
+
+      input ScalarsInput {
+        date: Date!
+        email: Email
+        str: String!
+      }
+      scalar Date
+      scalar Email
+
+      type Square {
+        size: Int
+      }
+      type Circle {
+        radius: Int
+      }
+    `);
+    const result = await plugin(
+      schema,
+      [],
+      {
+        schema: 'zod',
+        withObjectType: true,
+        typeWhitelist: ['AccountSettings', 'Square'],
+      },
+      {}
+    );
+    const wantContains = [
+      'type Properties<T> = Required<{',
+      '  [K in keyof T]: z.ZodType<T[K], any, T[K]>;',
+      '}>;',
+      'type definedNonNullAny = {};',
+      'export const isDefinedNonNullAny = (v: any): v is definedNonNullAny => v !== undefined && v !== null;',
+      'export const definedNonNullAnySchema = z.any().refine((v) => isDefinedNonNullAny(v));',
+      'export function AccountSettingsSchema(): z.ZodObject<Properties<AccountSettings>> {',
+      '  return z.object<Properties<AccountSettings>>({',
+      "    __typename: z.literal('AccountSettings').optional(),",
+      '    notificationGroups: z.array(EmailFrequencyUnitSchema.nullable()),',
+      '    UI: AccountSettingsUiSchema(),',
+      '    currencySetting: definedNonNullAnySchema,',
+      '    activationOrder: z.array(z.boolean().nullable())',
+      '  })',
+      '}',
+      'export const EmailFrequencyUnitSchema = z.nativeEnum(EmailFrequencyUnit);',
+      'export function DarkModeSettingsSchema(): z.ZodObject<Properties<DarkModeSettings>> {',
+      '  return z.object<Properties<DarkModeSettings>>({',
+      "    __typename: z.literal('DarkModeSettings').optional(),",
+      '    active: z.boolean(),',
+      '    contrast: z.number()',
+      '  })',
+      '}',
+      'export function AccountSettingsUiSchema(): z.ZodObject<Properties<AccountSettingsUi>> {',
+      '  return z.object<Properties<AccountSettingsUi>>({',
+      "    __typename: z.literal('AccountSettingsUI').optional(),",
+      '    darkMode: DarkModeSettingsSchema(),',
+      '    theme: z.string(),',
+      '    savedPages: z.array(z.number().nullable())',
+      '  })',
+      '}',
+      'export function ScalarsInputSchema(): z.ZodObject<Properties<ScalarsInput>> {',
+      '  return z.object<Properties<ScalarsInput>>({',
+      '    date: definedNonNullAnySchema,',
+      '    email: definedNonNullAnySchema.nullish(),',
+      '    str: z.string()',
+      '  })',
+      '}',
+      'export function SquareSchema(): z.ZodObject<Properties<Square>> {',
+      '  return z.object<Properties<Square>>({',
+      "    __typename: z.literal('Square').optional(),",
+      '    size: z.number().nullish()',
+      '  })',
+      '}',
+    ];
+    for (const wantContain of wantContains) {
+      expect(result.content).toContain(wantContain);
+    }
+  });
 });

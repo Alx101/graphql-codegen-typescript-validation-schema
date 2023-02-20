@@ -10,6 +10,8 @@ import {
   EnumTypeDefinitionNode,
   UnionTypeDefinitionNode,
   FieldDefinitionNode,
+  Kind,
+  GraphQLNamedType,
 } from 'graphql';
 import { DeclarationBlock, indent } from '@graphql-codegen/visitor-plugin-common';
 import { TsVisitor } from '@graphql-codegen/typescript';
@@ -18,8 +20,44 @@ import { buildApi, formatDirectiveConfig } from '../directive';
 const importZod = `import { z } from 'zod'`;
 const anySchema = `definedNonNullAnySchema`;
 
+export const extractName = (node: TypeNode, tsVisitor: TsVisitor, schema: GraphQLSchema): string[] => {
+  if (isNamedType(node)) {
+    const graphNode = schema.getType(node.name.value);
+    if (graphNode) return extractSubNames(graphNode, tsVisitor, schema);
+  }
+  if (isNonNullType(node)) {
+    return [...extractName(node.type, tsVisitor, schema)];
+  }
+  if (isListType(node)) {
+    return [...extractName(node.type, tsVisitor, schema)];
+  }
+  return [];
+};
+
+export const extractSubNames = (node: GraphQLNamedType, tsVisitor: TsVisitor, schema: GraphQLSchema) => {
+  if (!node.astNode?.kind || [Kind.SCALAR_TYPE_DEFINITION, Kind.ENUM_TYPE_DEFINITION].includes(node.astNode?.kind)) {
+    return [tsVisitor.convertName(node.name)];
+  }
+  const dependants =
+    (node.astNode as ObjectTypeDefinitionNode).fields?.map(f => {
+      return extractName(f.type, tsVisitor, schema);
+    }) || [];
+
+  return [...dependants.flat(), tsVisitor.convertName(node.name)];
+};
+
 export const ZodSchemaVisitor = (schema: GraphQLSchema, config: ValidationSchemaPluginConfig) => {
   const tsVisitor = new TsVisitor(schema, config);
+  const typeMap = schema.getTypeMap();
+
+  const wantedKeys = Object.keys(schema.getTypeMap()).reduce((acc, key) => {
+    if (config.typeWhitelist?.includes(key)) {
+      const node = typeMap[key];
+
+      return [...acc, ...extractSubNames(node, tsVisitor, schema)];
+    }
+    return acc;
+  }, [] as string[]);
 
   const importTypes: string[] = [];
 
@@ -54,6 +92,11 @@ export const ZodSchemaVisitor = (schema: GraphQLSchema, config: ValidationSchema
       ].join('\n'),
     InputObjectTypeDefinition: (node: InputObjectTypeDefinitionNode) => {
       const name = tsVisitor.convertName(node.name.value);
+
+      if (config.typeWhitelist && name !== 'ScalarsInput' && !wantedKeys.includes(name)) {
+        return;
+      }
+
       importTypes.push(name);
 
       const shape = node.fields?.map(field => generateFieldZodSchema(config, tsVisitor, schema, field, 2)).join(',\n');
@@ -66,6 +109,11 @@ export const ZodSchemaVisitor = (schema: GraphQLSchema, config: ValidationSchema
     },
     ObjectTypeDefinition: ObjectTypeDefinitionBuilder(config.withObjectType, (node: ObjectTypeDefinitionNode) => {
       const name = tsVisitor.convertName(node.name.value);
+
+      if (config.typeWhitelist && !wantedKeys.includes(name)) {
+        return;
+      }
+
       importTypes.push(name);
 
       const shape = node.fields?.map(field => generateFieldZodSchema(config, tsVisitor, schema, field, 2)).join(',\n');
